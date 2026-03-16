@@ -283,18 +283,38 @@ def risk_band(prob: float, threshold: float) -> tuple[str, str]:
 # DATA FETCH
 # ═══════════════════════════════════════════════════════════════════════════════
 
+def _demo_freq(interval: str) -> str:
+    return {
+        "1m": "min",
+        "5m": "5min",
+        "15m": "15min",
+        "30m": "30min",
+        "60m": "60min",
+        "1h": "h",
+        "1d": "B",
+    }.get(interval, "B")
+
+
 @st.cache_data(ttl=600, show_spinner=False)
-def _fetch(ticker: str, period: str, interval: str) -> pd.DataFrame:
+def _fetch(ticker: str, period: str, interval: str, cache_bust: int | None = None) -> pd.DataFrame:
+    # NOTE: `cache_bust` is intentionally unused; it exists to vary Streamlit's cache key
+    # so auto-refresh can reliably force new data instead of reusing a stale cached response.
+    _ = cache_bust
     return yf.Ticker(ticker).history(period=period, interval=interval, auto_adjust=False)
 
 
 def load_market_data(
-    ticker: str, period: str, interval: str, max_retries: int = 3
+    ticker: str,
+    period: str,
+    interval: str,
+    max_retries: int = 3,
+    *,
+    cache_bust: int | None = None,
 ) -> pd.DataFrame:
     last_err = ""
     for attempt in range(max_retries):
         try:
-            df = _fetch(ticker, period, interval)
+            df = _fetch(ticker, period, interval, cache_bust)
             if not df.empty:
                 return df
             last_err = "Empty response."
@@ -305,13 +325,30 @@ def load_market_data(
 
 
 def _period_rows(period: str, interval: str) -> int:
-    days = {"1mo": 22, "3mo": 66, "6mo": 132, "1y": 252, "2y": 504}.get(period, 132)
-    return days * 6 if interval == "1h" else days
+    # rough approximations for demo generation only
+    trading_days = {
+        "1d": 1,
+        "5d": 5,
+        "7d": 7,
+        "1mo": 22,
+        "3mo": 66,
+        "6mo": 132,
+        "1y": 252,
+        "2y": 504,
+    }.get(period, 132)
+
+    if interval in {"1m", "5m", "15m", "30m"}:
+        # ~390 minutes per trading day
+        minutes = {"1m": 1, "5m": 5, "15m": 15, "30m": 30}[interval]
+        return max(60, (trading_days * 390) // minutes)
+    if interval in {"60m", "1h"}:
+        return max(30, trading_days * 6)
+    return max(30, trading_days)
 
 
 def generate_demo_data(period: str, interval: str, seed: int = 42) -> pd.DataFrame:
     rows = _period_rows(period, interval)
-    freq = "h" if interval == "1h" else "B"
+    freq = _demo_freq(interval)
     rng  = np.random.default_rng(seed)
     ts   = pd.date_range(end=pd.Timestamp.utcnow(), periods=rows, freq=freq)
     ret  = rng.normal(0, 0.004 if interval == "1h" else 0.01, rows)
@@ -327,10 +364,15 @@ def generate_demo_data(period: str, interval: str, seed: int = 42) -> pd.DataFra
 
 
 def safe_load(
-    ticker: str, period: str, interval: str, use_fallback: bool
+    ticker: str,
+    period: str,
+    interval: str,
+    use_fallback: bool,
+    *,
+    cache_bust: int | None = None,
 ) -> tuple[pd.DataFrame, bool]:
     try:
-        return load_market_data(ticker, period, interval), False
+        return load_market_data(ticker, period, interval, cache_bust=cache_bust), False
     except Exception:
         if use_fallback:
             return generate_demo_data(period, interval), True
@@ -596,9 +638,32 @@ if mode == "Live Market":
     with left_col:
         preset_name = st.selectbox("NIFTY preset", list(NIFTY_PRESETS.keys()))
         preset_val  = NIFTY_PRESETS[preset_name]
-        ticker   = st.text_input("Ticker symbol", value=preset_val or "RELIANCE.NS").strip().upper()
-        period   = st.selectbox("Period",   ["1mo", "3mo", "6mo", "1y", "2y"], index=2)
-        interval = st.selectbox("Interval", ["1d", "1h"], index=0)
+        # initialise once; overwrite whenever a real preset is chosen
+        if "lm_ticker" not in st.session_state:
+            st.session_state["lm_ticker"] = preset_val or "RELIANCE.NS"
+        elif preset_val:
+            st.session_state["lm_ticker"] = preset_val
+        ticker   = st.text_input("Ticker symbol", key="lm_ticker").strip().upper()
+        interval = st.selectbox("Interval", ["1m", "5m", "15m", "30m", "60m", "1h", "1d"], index=1)
+
+        if interval == "1m":
+            period_opts = ["1d", "5d", "7d"]
+            period_default = "5d"
+        elif interval in {"5m", "15m", "30m"}:
+            period_opts = ["5d", "7d", "1mo"]
+            period_default = "7d"
+        elif interval in {"60m", "1h"}:
+            period_opts = ["1mo", "3mo", "6mo", "1y", "2y"]
+            period_default = "6mo"
+        else:
+            period_opts = ["1mo", "3mo", "6mo", "1y", "2y"]
+            period_default = "6mo"
+
+        period = st.selectbox(
+            "Period",
+            period_opts,
+            index=max(0, period_opts.index(period_default) if period_default in period_opts else 0),
+        )
         run_btn  = st.button("⚡ Run prediction", type="primary", use_container_width=True)
 
     with right_col:
@@ -608,7 +673,11 @@ if mode == "Live Market":
                 st.stop()
 
             with st.spinner("Fetching market data…"):
-                market, is_demo = safe_load(ticker, period, interval, use_demo_fallback)
+                # force refresh cadence to match the chosen auto-refresh interval (avoid 10-minute cache staleness)
+                cache_bust = int(time.time() // max(15, int(refresh_secs))) if auto_refresh else None
+                market, is_demo = safe_load(
+                    ticker, period, interval, use_demo_fallback, cache_bust=cache_bust
+                )
                 market = flatten_columns(market)
 
             if is_demo:
