@@ -23,6 +23,17 @@ from plotly.subplots import make_subplots
 from sklearn.preprocessing import StandardScaler
 from tensorflow.keras.models import load_model
 
+# ── register custom layers for improved model ────────────────────────────────
+import sys, importlib
+_parent = str(Path(__file__).resolve().parent.parent)
+if _parent not in sys.path:
+    sys.path.insert(0, _parent)
+try:
+    from custom_layers import Attention as _Attention
+    _CUSTOM_OBJECTS = {"Attention": _Attention}
+except ImportError:
+    _CUSTOM_OBJECTS = {}
+
 # ── silence noisy yfinance logs ──────────────────────────────────────────────
 logging.getLogger("yfinance").setLevel(logging.CRITICAL)
 
@@ -55,6 +66,7 @@ DEFAULT_WATCHLIST: list[str] = [
 ]
 
 MODEL_CANDIDATES: list[str] = [
+    "improved_flash_crash_model.keras",
     "best_gru_model_improved.h5",
     "gru_model_final_improved.h5",
     "flash_crash_model.keras",
@@ -241,7 +253,7 @@ def discover_models() -> list[Path]:
 
 @st.cache_resource
 def load_trained_model(path_str: str):
-    return load_model(path_str, compile=False)
+    return load_model(path_str, compile=False, custom_objects=_CUSTOM_OBJECTS)
 
 
 def get_model_signature(model) -> tuple[int, int]:
