@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flash Crash Predictor — Real-Time AI Risk Detection</title>
+    <meta name="description" content="Real-time flash crash prediction for Indian equity markets using BiGRU + Attention deep learning models.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- ═══════════════ NAV ═══════════════ -->
+    <nav id="navbar">
+        <div class="nav-brand">
+            <div class="nav-logo">
+                <div class="logo-pulse"></div>
+                <span class="logo-icon">⚡</span>
+            </div>
+            <div class="nav-text">
+                <span class="nav-title">FlashGuard</span>
+                <span class="nav-subtitle">AI Crash Detection</span>
+            </div>
+        </div>
+        <div class="nav-tabs">
+            <button class="nav-tab active" data-tab="live" id="tab-live">
+                <span class="tab-dot live-dot"></span> Real-Time Monitor
+            </button>
+            <button class="nav-tab" data-tab="timeline" id="tab-timeline">
+                <span class="tab-dot"></span> Historical Risk
+            </button>
+        </div>
+        <div class="nav-right">
+            <div class="nav-model">
+                <select id="model-select"></select>
+            </div>
+            <div id="connection-indicator" class="conn-badge offline">
+                <span class="conn-dot"></span>
+                <span class="conn-text">Offline</span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- ═══════════════ MAIN CONTENT ═══════════════ -->
+    <main id="app">
+        <!-- ── LIVE MONITOR TAB ── -->
+        <section id="section-live" class="tab-section active">
+            <!-- Controls -->
+            <div class="live-controls">
+                <div class="control-group">
+                    <label for="ticker-input">Symbol</label>
+                    <div class="ticker-wrapper">
+                        <input type="text" id="ticker-input" value="RELIANCE.NS" placeholder="e.g. RELIANCE.NS" spellcheck="false">
+                        <select id="preset-select" title="Quick pick">
+                            <option value="">▼</option>
+                            <option value="RELIANCE.NS">Reliance</option>
+                            <option value="TCS.NS">TCS</option>
+                            <option value="HDFCBANK.NS">HDFC Bank</option>
+                            <option value="INFY.NS">Infosys</option>
+                            <option value="ICICIBANK.NS">ICICI Bank</option>
+                            <option value="SBIN.NS">SBI</option>
+                            <option value="WIPRO.NS">Wipro</option>
+                            <option value="BAJFINANCE.NS">Bajaj Finance</option>
+                            <option value="ADANIENT.NS">Adani Ent</option>
+                            <option value="ITC.NS">ITC</option>
+                            <option value="AXISBANK.NS">Axis Bank</option>
+                            <option value="MARUTI.NS">Maruti</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="control-group">
+                    <label for="interval-select">Data Interval</label>
+                    <select id="interval-select">
+                        <option value="1m">1 Minute</option>
+                        <option value="5m" selected>5 Minutes</option>
+                        <option value="15m">15 Minutes</option>
+                        <option value="1h">1 Hour</option>
+                        <option value="1d">1 Day</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label>Auto-Refresh</label>
+                    <div class="toggle-wrapper">
+                        <button id="btn-auto" class="toggle-btn" title="Toggle auto-refresh">OFF</button>
+                        <span id="refresh-timer" class="refresh-timer"></span>
+                    </div>
+                </div>
+                <button class="btn-scan" id="btn-predict">
+                    <span class="btn-pulse"></span>
+                    SCAN NOW
+                </button>
+            </div>
+
+            <!-- Risk Dashboard -->
+            <div id="live-results" class="live-dashboard hidden">
+                <!-- Top Row: Risk Level + Stats -->
+                <div class="dash-top">
+                    <div class="risk-hero" id="risk-hero">
+                        <div class="risk-ring-wrapper">
+                            <canvas id="risk-ring" width="220" height="220"></canvas>
+                            <div class="risk-ring-center">
+                                <div class="risk-pct" id="risk-pct">0.0</div>
+                                <div class="risk-pct-symbol">%</div>
+                            </div>
+                        </div>
+                        <div class="risk-badge" id="risk-badge">STABLE</div>
+                        <div class="risk-description" id="risk-description">No significant crash risk detected</div>
+                    </div>
+
+                    <div class="stats-panel">
+                        <div class="stat-card" id="stat-ticker-card">
+                            <div class="stat-icon">📈</div>
+                            <div class="stat-info">
+                                <span class="stat-label">Ticker</span>
+                                <span class="stat-value" id="stat-ticker">—</span>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon">💰</div>
+                            <div class="stat-info">
+                                <span class="stat-label">Latest Price</span>
+                                <span class="stat-value" id="stat-price">—</span>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon">📅</div>
+                            <div class="stat-info">
+                                <span class="stat-label">As Of</span>
+                                <span class="stat-value" id="stat-date">—</span>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon">🧠</div>
+                            <div class="stat-info">
+                                <span class="stat-label">Model</span>
+                                <span class="stat-value mono" id="stat-model">—</span>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon">⏱️</div>
+                            <div class="stat-info">
+                                <span class="stat-label">Interval</span>
+                                <span class="stat-value" id="stat-interval">—</span>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon">🔢</div>
+                            <div class="stat-info">
+                                <span class="stat-label">Input Shape</span>
+                                <span class="stat-value mono" id="stat-shape">—</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Price Chart -->
+                <div class="card card-chart">
+                    <div class="card-header">
+                        <h3>Price Action</h3>
+                        <span class="card-subtitle" id="chart-subtitle">Last 60 bars</span>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="price-chart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Risk History (mini chart of recent predictions) -->
+                <div class="card card-chart">
+                    <div class="card-header">
+                        <h3>Risk History</h3>
+                        <span class="card-subtitle" id="risk-history-count">Recent predictions</span>
+                    </div>
+                    <div class="chart-wrapper small">
+                        <canvas id="risk-history-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Loading -->
+            <div id="live-loading" class="loading-overlay hidden">
+                <div class="loader">
+                    <div class="loader-ring"></div>
+                    <div class="loader-ring"></div>
+                    <div class="loader-ring"></div>
+                </div>
+                <p>Fetching market data & running model inference…</p>
+            </div>
+
+            <!-- Empty state -->
+            <div id="live-empty" class="empty-state">
+                <div class="empty-icon">⚡</div>
+                <h2>Real-Time Flash Crash Detection</h2>
+                <p>Enter a stock symbol and click <strong>SCAN NOW</strong> to analyze current crash risk using our BiGRU + Attention deep learning model.</p>
+                <div class="empty-features">
+                    <div class="feature-item">
+                        <span class="feature-icon">📊</span>
+                        <span>Minute-level analysis</span>
+                    </div>
+                    <div class="feature-item">
+                        <span class="feature-icon">🔄</span>
+                        <span>Auto-refresh every 60s</span>
+                    </div>
+                    <div class="feature-item">
+                        <span class="feature-icon">🎯</span>
+                        <span>99.1% AUC accuracy</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ── TIMELINE TAB ── -->
+        <section id="section-timeline" class="tab-section">
+            <div class="live-controls">
+                <div class="control-group">
+                    <label for="timeline-ticker">Symbol</label>
+                    <input type="text" id="timeline-ticker" value="RELIANCE.NS" placeholder="e.g. RELIANCE.NS" spellcheck="false">
+                </div>
+                <div class="control-group">
+                    <label for="timeline-period">Period</label>
+                    <select id="timeline-period">
+                        <option value="6mo">6 Months</option>
+                        <option value="1y" selected>1 Year</option>
+                        <option value="2y">2 Years</option>
+                    </select>
+                </div>
+                <button class="btn-scan" id="btn-timeline">GENERATE</button>
+            </div>
+
+            <div id="timeline-results" class="hidden">
+                <div class="card card-chart">
+                    <div class="card-header">
+                        <h3>Rolling Risk Timeline</h3>
+                        <span class="card-subtitle" id="timeline-subtitle">—</span>
+                    </div>
+                    <div class="chart-wrapper tall">
+                        <canvas id="timeline-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div id="timeline-loading" class="loading-overlay hidden">
+                <div class="loader">
+                    <div class="loader-ring"></div>
+                    <div class="loader-ring"></div>
+                    <div class="loader-ring"></div>
+                </div>
+                <p>Computing rolling risk curve…</p>
+            </div>
+
+            <div id="timeline-empty" class="empty-state">
+                <div class="empty-icon">📈</div>
+                <h2>Historical Risk Analysis</h2>
+                <p>See how crash risk has evolved over time for any stock.</p>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <p>FlashGuard · BiGRU + Attention · Trained on 15.9M NIFTY minute bars (2015–2025)</p>
+    </footer>
+
+    <script src="app.js"></script>
+</body>
+</html>

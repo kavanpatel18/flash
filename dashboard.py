@@ -18,6 +18,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
+from streamlit_autorefresh import st_autorefresh
 import yfinance as yf
 from plotly.subplots import make_subplots
 from sklearn.preprocessing import StandardScaler
@@ -67,6 +68,7 @@ DEFAULT_WATCHLIST: list[str] = [
 
 MODEL_CANDIDATES: list[str] = [
     "improved_flash_crash_model.keras",
+    "improved_minute_model.keras",
     "best_gru_model_improved.h5",
     "gru_model_final_improved.h5",
     "flash_crash_model.keras",
@@ -92,6 +94,14 @@ FEATURES_20x14: list[str] = [
     "high_low_spread", "open_close_return", "turnover_change",
 ]
 
+FEATURES_30x10: list[str] = [
+    "return", "log_return",
+    "volatility_5", "volatility_10", "volatility_20",
+    "momentum_5", "momentum_10",
+    "high_low_spread", "open_close_return",
+    "price_acceleration",
+]
+
 # ── page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="GRU Flash Crash Risk",
@@ -102,59 +112,125 @@ st.set_page_config(
 
 st.markdown("""
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
 :root {
-  --bg: #f0f4f8;
-  --surface: #ffffff;
-  --ink: #102a43;
-  --muted: #486581;
-  --accent: #0f766e;
-  --border: #d9e2ec;
+  --bg: #0b1120;
+  --surface: rgba(15, 23, 42, 0.7);
+  --surface-solid: #0f172a;
+  --ink: #e2e8f0;
+  --muted: #94a3b8;
+  --accent: #06d6a0;
+  --accent-glow: rgba(6, 214, 160, 0.15);
+  --danger: #ef4444;
+  --danger-glow: rgba(239, 68, 68, 0.15);
+  --warning: #f59e0b;
+  --border: rgba(148, 163, 184, 0.12);
+  --radius: 16px;
 }
+
 .stApp {
-  background:
-    radial-gradient(ellipse at 5% 0%,  #c6f0eb 0%, transparent 40%),
-    radial-gradient(ellipse at 95% 5%, #fde8c8 0%, transparent 30%),
-    var(--bg);
+  background: var(--bg) !important;
+  font-family: 'Inter', -apple-system, system-ui, sans-serif !important;
 }
-.hero {
-  padding: 1.1rem 1.5rem;
-  background: linear-gradient(110deg, #0f766e 0%, #134e6f 100%);
-  color: #fff;
-  border-radius: 16px;
-  box-shadow: 0 8px 32px rgba(16,42,67,.2);
-  margin-bottom: 1.1rem;
+
+/* sidebar */
+section[data-testid="stSidebar"] {
+  background: linear-gradient(180deg, #0f172a 0%, #1e1b4b 100%) !important;
+  border-right: 1px solid var(--border) !important;
 }
-.hero h1 { margin: 0; font-size: 1.75rem; letter-spacing: .3px; }
-.hero p  { margin: .35rem 0 0; font-size: .9rem; opacity: .9; }
-.stat-card {
-  background: var(--surface);
+section[data-testid="stSidebar"] * { color: #cbd5e1 !important; }
+section[data-testid="stSidebar"] .stSelectbox label,
+section[data-testid="stSidebar"] .stSlider label,
+section[data-testid="stSidebar"] .stCheckbox label,
+section[data-testid="stSidebar"] .stRadio label { font-size: .82rem !important; }
+
+/* hero banner */
+.hero-bar {
+  background: linear-gradient(135deg, #1e293b 0%, #0f172a 50%, #1e1b4b 100%);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: .75rem 1rem;
-  box-shadow: 0 4px 14px rgba(16,42,67,.07);
-  font-size: .88rem;
+  border-radius: var(--radius);
+  padding: 1rem 1.5rem;
+  margin-bottom: .8rem;
+  display: flex; align-items: center; justify-content: space-between;
 }
-.risk-chip {
+.hero-bar h1 {
+  margin: 0; font-size: 1.4rem; font-weight: 700;
+  color: #f1f5f9; letter-spacing: -.3px;
+}
+.hero-bar .hero-sub {
+  font-size: .78rem; color: var(--muted); margin-top: .15rem;
+}
+.hero-bar .hero-badge {
+  background: var(--accent-glow); color: var(--accent);
+  border: 1px solid rgba(6,214,160,.25);
+  padding: .3rem .7rem; border-radius: 999px;
+  font-size: .72rem; font-weight: 600; letter-spacing: .5px;
+}
+
+/* risk result card */
+.risk-result {
+  background: var(--surface);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.2rem 1.5rem;
+  text-align: center;
+  transition: transform .2s, box-shadow .2s;
+}
+.risk-result:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 40px rgba(0,0,0,.3);
+}
+.risk-pct {
+  font-size: 3rem; font-weight: 800; line-height: 1;
+  margin: .3rem 0; letter-spacing: -1px;
+}
+.risk-pct.low  { color: var(--accent); }
+.risk-pct.mid  { color: var(--warning); }
+.risk-pct.high { color: var(--danger); }
+.risk-label {
   display: inline-block;
-  font-weight: 700;
-  padding: .32rem .65rem;
-  border-radius: 999px;
-  font-size: .82rem;
+  padding: .25rem .75rem; border-radius: 999px;
+  font-size: .75rem; font-weight: 700; letter-spacing: 1px;
   color: #fff;
-  margin-top: .3rem;
-  letter-spacing: .3px;
 }
-section[data-testid="stSidebar"] { background: #0e2137 !important; }
-section[data-testid="stSidebar"] * { color: #d9e8f5 !important; }
+.risk-label.low  { background: var(--accent); }
+.risk-label.mid  { background: var(--warning); }
+.risk-label.high { background: var(--danger); }
+.risk-meta {
+  font-size: .72rem; color: var(--muted); margin-top: .5rem;
+}
+
+/* glass cards */
+.glass-card {
+  background: var(--surface);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem 1.2rem;
+}
+.glass-card h3 {
+  margin: 0 0 .3rem; font-size: .85rem; font-weight: 600;
+  color: var(--muted); text-transform: uppercase; letter-spacing: .8px;
+}
+.glass-card .val {
+  font-size: 1.3rem; font-weight: 700; color: var(--ink);
+}
+
+/* force dark text in main area */
+.stApp, .stApp p, .stApp span, .stApp label, .stApp .stMarkdown {
+  color: var(--ink) !important;
+}
+.stApp h1, .stApp h2, .stApp h3, .stApp h4 {
+  color: #f1f5f9 !important;
+}
+
+/* plotly container */
+.stPlotlyChart { border-radius: var(--radius); overflow: hidden; }
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown("""
-<div class='hero'>
-  <h1>📉 GRU Flash Crash Risk Prediction</h1>
-  <p>Deep learning early-warning system for Indian equity markets · Gated Recurrent Units + LSTM</p>
-</div>
-""", unsafe_allow_html=True)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -174,18 +250,35 @@ def build_common_columns(df: pd.DataFrame) -> pd.DataFrame:
     if missing:
         raise ValueError(f"Missing OHLCV columns: {missing}")
     out = df.copy()
-    out["return"]             = np.log(out["Close"] / out["Close"].shift(1))
-    out["volume_change"]      = out["Volume"].pct_change()
+
+    # ── base returns (MUST match training scripts exactly) ────────────────
+    out["return"]             = out["Close"].pct_change()           # pct_change for daily & minute models
+    out["log_return"]         = np.log(out["Close"] / out["Close"].shift(1))  # separate log-return
+
+    # ── volatility at multiple scales ─────────────────────────────────────
     out["volatility_5"]       = out["return"].rolling(5).std()
     out["volatility_10"]      = out["return"].rolling(10).std()
+    out["volatility_20"]      = out["return"].rolling(20).std()
+    out["volatility"]         = out["return"].rolling(10).std()     # alias for daily model
+
+    # ── momentum ──────────────────────────────────────────────────────────
     out["momentum_5"]         = out["Close"].pct_change(5)
+    out["momentum_10"]        = out["Close"].pct_change(10)
+    out["momentum"]           = out["Close"] - out["Close"].shift(5)  # absolute for daily model
+
+    # ── volume / turnover ─────────────────────────────────────────────────
+    out["volume_change"]      = out["Volume"].pct_change()
     out["VWAP"]               = (out["High"] + out["Low"] + out["Close"]) / 3.0
-    out["volatility"]         = out["return"].rolling(10).std()
-    out["momentum"]           = out["Close"] - out["Close"].shift(5)
     out["vwap_diff"]          = (out["Close"] - out["VWAP"]) / out["VWAP"].replace(0, np.nan)
+    out["turnover_change"]    = (out["Close"] * out["Volume"]).pct_change()
+
+    # ── price structure ───────────────────────────────────────────────────
     out["high_low_spread"]    = (out["High"] - out["Low"]) / out["Close"].replace(0, np.nan)
     out["open_close_return"]  = (out["Close"] - out["Open"]) / out["Open"].replace(0, np.nan)
-    out["turnover_change"]    = (out["Close"] * out["Volume"]).pct_change()
+
+    # ── minute-model extras ───────────────────────────────────────────────
+    out["price_acceleration"] = out["return"].diff()
+
     return out
 
 
@@ -198,12 +291,17 @@ def build_sequence(
         ff = prepared[features].dropna().copy()
         sc = StandardScaler()
         ff.loc[:, features] = sc.fit_transform(ff[features])
+    elif feature_count == 10:
+        features = FEATURES_30x10
+        ff = prepared[features].dropna().copy()
+        sc = StandardScaler()
+        ff.loc[:, features] = sc.fit_transform(ff[features])
     elif feature_count == 14:
         features = FEATURES_20x14
         ff = prepared[features].dropna().copy()
     else:
         raise ValueError(
-            f"Model expects {feature_count} features — app supports 5 or 14."
+            f"Model expects {feature_count} features — app supports 5, 10, or 14."
         )
     if len(ff) < timesteps:
         raise ValueError(
@@ -224,6 +322,11 @@ def compute_risk_timeline(
     prepared = build_common_columns(flatten_columns(df))
     if feature_count == 5:
         features = FEATURES_30x5
+        ff = prepared[features].dropna().copy()
+        sc = StandardScaler()
+        ff.loc[:, features] = sc.fit_transform(ff[features])
+    elif feature_count == 10:
+        features = FEATURES_30x10
         ff = prepared[features].dropna().copy()
         sc = StandardScaler()
         ff.loc[:, features] = sc.fit_transform(ff[features])
@@ -598,34 +701,23 @@ if mode == "Live Market":
     auto_refresh = st.sidebar.toggle("Auto-refresh", value=False)
     if auto_refresh:
         refresh_secs = st.sidebar.select_slider(
-            "Interval (s)", options=[30, 60, 120, 300], value=60
+            "Interval (s)", options=[15, 30, 60, 120, 300], value=60
         )
+        # non-blocking JS-based page rerun
+        st_autorefresh(interval=refresh_secs * 1000, key="live_autorefresh")
 
 use_demo_fallback = st.sidebar.checkbox("Demo fallback if rate-limited", value=True)
 
-# ── status bar ────────────────────────────────────────────────────────────────
-c1, c2, c3, c4 = st.columns(4)
-with c1:
-    st.markdown(
-        f"<div class='stat-card'>🤖 <b>Model</b><br>{selected_path.name}</div>",
-        unsafe_allow_html=True,
-    )
-with c2:
-    st.markdown(
-        f"<div class='stat-card'>📐 <b>Input shape</b><br>{timesteps} × {feature_count}</div>",
-        unsafe_allow_html=True,
-    )
-with c3:
-    st.markdown(
-        f"<div class='stat-card'>🗂️ <b>Mode</b><br>{mode}</div>",
-        unsafe_allow_html=True,
-    )
-with c4:
-    st.markdown(
-        f"<div class='stat-card'>⚠️ <b>Threshold</b><br>{threshold:.0%}</div>",
-        unsafe_allow_html=True,
-    )
-st.write("")
+# ── hero bar ──────────────────────────────────────────────────────────────────
+st.markdown(f"""
+<div class='hero-bar'>
+  <div>
+    <h1>📉 Flash Crash Risk Prediction</h1>
+    <div class='hero-sub'>{selected_path.stem} · {timesteps}×{feature_count} · threshold {threshold:.0%}</div>
+  </div>
+  <span class='hero-badge'>● LIVE</span>
+</div>
+""", unsafe_allow_html=True)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -633,123 +725,142 @@ st.write("")
 # ═══════════════════════════════════════════════════════════════════════════════
 
 if mode == "Live Market":
-    left_col, right_col = st.columns([1, 3])
-
-    with left_col:
-        preset_name = st.selectbox("NIFTY preset", list(NIFTY_PRESETS.keys()))
+    # ── controls row ──────────────────────────────────────────────────────
+    ctrl1, ctrl2, ctrl3, ctrl4, ctrl5 = st.columns([2, 2, 1.5, 1.5, 1.5])
+    with ctrl1:
+        preset_name = st.selectbox("NIFTY preset", list(NIFTY_PRESETS.keys()), label_visibility="collapsed")
         preset_val  = NIFTY_PRESETS[preset_name]
-        # initialise once; overwrite whenever a real preset is chosen
         if "lm_ticker" not in st.session_state:
             st.session_state["lm_ticker"] = preset_val or "RELIANCE.NS"
         elif preset_val:
             st.session_state["lm_ticker"] = preset_val
-        ticker   = st.text_input("Ticker symbol", key="lm_ticker").strip().upper()
-        interval = st.selectbox("Interval", ["1m", "5m", "15m", "30m", "60m", "1h", "1d"], index=1)
-
+    with ctrl2:
+        ticker = st.text_input("Ticker", key="lm_ticker", label_visibility="collapsed", placeholder="Ticker e.g. RELIANCE.NS").strip().upper()
+    with ctrl3:
+        interval = st.selectbox("Interval", ["1m", "5m", "15m", "30m", "60m", "1h", "1d"], index=1, label_visibility="collapsed")
+    with ctrl4:
         if interval == "1m":
-            period_opts = ["1d", "5d", "7d"]
-            period_default = "5d"
+            period_opts = ["1d", "5d", "7d"]; period_default = "5d"
         elif interval in {"5m", "15m", "30m"}:
-            period_opts = ["5d", "7d", "1mo"]
-            period_default = "7d"
+            period_opts = ["5d", "7d", "1mo"]; period_default = "7d"
         elif interval in {"60m", "1h"}:
-            period_opts = ["1mo", "3mo", "6mo", "1y", "2y"]
-            period_default = "6mo"
+            period_opts = ["1mo", "3mo", "6mo", "1y", "2y"]; period_default = "6mo"
         else:
-            period_opts = ["1mo", "3mo", "6mo", "1y", "2y"]
-            period_default = "6mo"
-
+            period_opts = ["1mo", "3mo", "6mo", "1y", "2y"]; period_default = "6mo"
         period = st.selectbox(
-            "Period",
-            period_opts,
+            "Period", period_opts,
             index=max(0, period_opts.index(period_default) if period_default in period_opts else 0),
+            label_visibility="collapsed",
         )
-        run_btn  = st.button("⚡ Run prediction", type="primary", use_container_width=True)
+    with ctrl5:
+        run_btn = st.button("⚡ Predict", type="primary", use_container_width=True)
 
-    with right_col:
-        if run_btn or auto_refresh:
-            if not ticker:
-                st.warning("Enter a valid ticker symbol.")
-                st.stop()
+    # ── intraday notice (compact) ─────────────────────────────────────────
+    _is_intraday = interval in {"1m", "5m", "15m", "30m", "60m", "1h"}
+    _is_minute_model = "minute" in selected_path.name.lower()
+    if _is_intraday and not _is_minute_model:
+        st.caption("⚠️ Using daily model on intraday data — select **improved_minute_model.keras** for better accuracy")
 
-            with st.spinner("Fetching market data…"):
-                # force refresh cadence to match the chosen auto-refresh interval (avoid 10-minute cache staleness)
-                cache_bust = int(time.time() // max(15, int(refresh_secs))) if auto_refresh else None
-                market, is_demo = safe_load(
-                    ticker, period, interval, use_demo_fallback, cache_bust=cache_bust
+    # ── run prediction ────────────────────────────────────────────────────
+    if run_btn or auto_refresh:
+        if not ticker:
+            st.warning("Enter a valid ticker symbol.")
+            st.stop()
+
+        with st.spinner("Fetching market data…"):
+            cache_bust = int(time.time() // max(15, int(refresh_secs))) if auto_refresh else None
+            market, is_demo = safe_load(
+                ticker, period, interval, use_demo_fallback, cache_bust=cache_bust
+            )
+            market = flatten_columns(market)
+
+        if is_demo:
+            st.caption("📡 Demo data — Yahoo Finance rate-limited")
+
+        try:
+            seq, ff, feature_list = build_sequence(market, timesteps, feature_count)
+            prob = normalize_prob(predict_probability(model, seq))
+        except Exception as exc:
+            st.error(f"Prediction failed: {exc}")
+            st.stop()
+
+        band, color = risk_band(prob, threshold)
+        log_prediction(ticker, prob, band, selected_path.stem)
+
+        # determine risk CSS class
+        _cls = "low" if prob < threshold else ("mid" if prob < 0.5 else "high")
+
+        # ── result layout: risk card | price chart ────────────────────────
+        risk_col, chart_col = st.columns([1, 2.5])
+
+        with risk_col:
+            st.markdown(f"""
+            <div class='risk-result'>
+              <div style='font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;font-weight:600'>
+                Crash Probability
+              </div>
+              <div class='risk-pct {_cls}'>{prob:.1%}</div>
+              <span class='risk-label {_cls}'>{band}</span>
+              <div class='risk-meta'>
+                {ticker} · {interval} · {time.strftime('%H:%M:%S')}
+              </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # key stats cards
+            last_close = market["Close"].iloc[-1] if len(market) > 0 else 0
+            day_ret = market["Close"].pct_change().iloc[-1] * 100 if len(market) > 1 else 0
+            st.markdown(f"""
+            <div class='glass-card' style='margin-top:.8rem'>
+              <h3>Last Price</h3>
+              <div class='val'>₹{last_close:,.2f}</div>
+            </div>
+            """, unsafe_allow_html=True)
+            st.markdown(f"""
+            <div class='glass-card' style='margin-top:.5rem'>
+              <h3>Period Return</h3>
+              <div class='val' style='color:{"var(--accent)" if day_ret >= 0 else "var(--danger)"}'>{day_ret:+.2f}%</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with chart_col:
+            candle = go.Figure(go.Candlestick(
+                x=market.index,
+                open=market["Open"], high=market["High"],
+                low=market["Low"],   close=market["Close"],
+                name=ticker,
+                increasing_line_color="#06d6a0",
+                decreasing_line_color="#ef4444",
+            ))
+            candle.update_layout(
+                height=340,
+                margin=dict(l=10, r=10, t=35, b=10),
+                xaxis_rangeslider_visible=False,
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(15,23,42,0.5)",
+                title=dict(text=f"{ticker} — {period} {interval}", font=dict(color="#e2e8f0", size=14)),
+                xaxis=dict(gridcolor="rgba(148,163,184,0.08)", color="#94a3b8"),
+                yaxis=dict(gridcolor="rgba(148,163,184,0.08)", color="#94a3b8"),
+                font=dict(color="#94a3b8"),
+            )
+            st.plotly_chart(candle, use_container_width=True)
+
+        # ── expandable details ────────────────────────────────────────────
+        with st.expander("📊 Feature snapshot & engineering details"):
+            st.plotly_chart(feature_bar_chart(ff, feature_list), use_container_width=True)
+            st.dataframe(ff.tail(5), use_container_width=True)
+
+        if st.session_state["pred_log"]:
+            with st.expander("🕘 Prediction history", expanded=False):
+                st.dataframe(
+                    pd.DataFrame(st.session_state["pred_log"]),
+                    use_container_width=True,
+                    hide_index=True,
                 )
-                market = flatten_columns(market)
 
-            if is_demo:
-                st.warning(
-                    "📡 Yahoo Finance is rate-limited — showing **offline demo stream**. "
-                    "Feature engineering and GRU inference still run on real logic.",
-                    icon="⚠️",
-                )
-
-            try:
-                seq, ff, feature_list = build_sequence(market, timesteps, feature_count)
-                prob = normalize_prob(predict_probability(model, seq))
-            except Exception as exc:
-                st.error(f"Prediction failed: {exc}")
-                st.stop()
-
-            band, color = risk_band(prob, threshold)
-            log_prediction(ticker, prob, band, selected_path.stem)
-
-            g_col, chart_col = st.columns([1, 2])
-
-            with g_col:
-                st.plotly_chart(gauge_chart(prob, threshold), use_container_width=True)
-                st.markdown(
-                    f"<span class='risk-chip' style='background:{color}'>{band}</span>",
-                    unsafe_allow_html=True,
-                )
-                if prob >= threshold:
-                    st.error(f"Signal exceeds threshold ({threshold:.0%})")
-                else:
-                    st.success("No high-risk signal at current threshold")
-
-            with chart_col:
-                candle = go.Figure(go.Candlestick(
-                    x=market.index,
-                    open=market["Open"], high=market["High"],
-                    low=market["Low"],   close=market["Close"],
-                    name=ticker,
-                    increasing_line_color="#15803d",
-                    decreasing_line_color="#b91c1c",
-                ))
-                candle.update_layout(
-                    height=260,
-                    margin=dict(l=10, r=10, t=20, b=10),
-                    xaxis_rangeslider_visible=False,
-                    paper_bgcolor="rgba(0,0,0,0)",
-                    plot_bgcolor="rgba(0,0,0,0)",
-                    title=f"{ticker} — {period} {interval}",
-                )
-                st.plotly_chart(candle, use_container_width=True)
-                st.plotly_chart(feature_bar_chart(ff, feature_list), use_container_width=True)
-
-            with st.expander("📋 Engineered feature rows (last 5)"):
-                st.dataframe(ff.tail(5), use_container_width=True)
-
-            if st.session_state["pred_log"]:
-                with st.expander("🕘 Session prediction log", expanded=False):
-                    st.dataframe(
-                        pd.DataFrame(st.session_state["pred_log"]),
-                        use_container_width=True,
-                        hide_index=True,
-                    )
-
-            # ── auto-refresh countdown ────────────────────────────────────────
-            if auto_refresh:
-                countdown = st.empty()
-                for remaining in range(refresh_secs, 0, -1):
-                    countdown.caption(f"🔄 Auto-refreshing in {remaining}s…")
-                    time.sleep(1)
-                countdown.empty()
-                _fetch.clear()
-                st.rerun()
+        # ── auto-refresh info ─────────────────────────────────────────────
+        if auto_refresh:
+            st.caption(f"🔄 Auto-refreshing every {refresh_secs}s")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
