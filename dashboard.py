@@ -3,10 +3,8 @@ GRU Flash Crash Risk Prediction — Enhanced Dashboard
 =====================================================
 Modes:
   1. Live Market    — single-stock prediction with optional auto-refresh
-  2. Risk Timeline  — rolling GRU risk curve overlaid on a candlestick chart
-  3. Portfolio Scan — risk ranking across a NIFTY watchlist
-  4. Compare Models — run all available model artifacts on the same data
-  5. Upload CSV     — batch file-based inference
+    2. Portfolio Scan — risk ranking across a NIFTY watchlist
+    3. Upload CSV     — batch file-based inference
 """
 from pathlib import Path
 import logging
@@ -112,20 +110,21 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap');
 
 :root {
-  --bg: #0b1120;
-  --surface: rgba(15, 23, 42, 0.7);
-  --surface-solid: #0f172a;
+    --bg: #060a13;
+    --surface: rgba(12, 18, 32, 0.82);
+    --surface-solid: #10182c;
   --ink: #e2e8f0;
-  --muted: #94a3b8;
-  --accent: #06d6a0;
-  --accent-glow: rgba(6, 214, 160, 0.15);
+    --muted: #8b9dc3;
+    --accent: #38bdf8;
+    --accent-2: #818cf8;
+    --accent-glow: rgba(56, 189, 248, 0.14);
   --danger: #ef4444;
   --danger-glow: rgba(239, 68, 68, 0.15);
   --warning: #f59e0b;
-  --border: rgba(148, 163, 184, 0.12);
+    --border: rgba(255, 255, 255, 0.08);
   --radius: 16px;
 }
 
@@ -134,12 +133,39 @@ st.markdown("""
   font-family: 'Inter', -apple-system, system-ui, sans-serif !important;
 }
 
+.stApp::before,
+.stApp::after {
+    content: "";
+    position: fixed;
+    border-radius: 50%;
+    filter: blur(130px);
+    opacity: 0.25;
+    pointer-events: none;
+    z-index: 0;
+}
+
+.stApp::before {
+    width: 560px;
+    height: 560px;
+    top: -180px;
+    left: -120px;
+    background: radial-gradient(circle, #0ea5e9 0%, transparent 70%);
+}
+
+.stApp::after {
+    width: 460px;
+    height: 460px;
+    right: -120px;
+    bottom: -140px;
+    background: radial-gradient(circle, #818cf8 0%, transparent 70%);
+}
+
 /* sidebar */
 section[data-testid="stSidebar"] {
-  background: linear-gradient(180deg, #0f172a 0%, #1e1b4b 100%) !important;
+    background: linear-gradient(180deg, #0d1528 0%, #141d33 100%) !important;
   border-right: 1px solid var(--border) !important;
 }
-section[data-testid="stSidebar"] * { color: #cbd5e1 !important; }
+section[data-testid="stSidebar"] * { color: #d9e8f5 !important; }
 section[data-testid="stSidebar"] .stSelectbox label,
 section[data-testid="stSidebar"] .stSlider label,
 section[data-testid="stSidebar"] .stCheckbox label,
@@ -147,10 +173,11 @@ section[data-testid="stSidebar"] .stRadio label { font-size: .82rem !important; 
 
 /* hero banner */
 .hero-bar {
-  background: linear-gradient(135deg, #1e293b 0%, #0f172a 50%, #1e1b4b 100%);
+    background: linear-gradient(135deg, #0ea5e9 0%, #1d4ed8 45%, #4f46e5 100%);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 1rem 1.5rem;
+    box-shadow: 0 14px 45px rgba(2, 6, 23, .35);
+    padding: 1.05rem 1.5rem;
   margin-bottom: .8rem;
   display: flex; align-items: center; justify-content: space-between;
 }
@@ -159,13 +186,14 @@ section[data-testid="stSidebar"] .stRadio label { font-size: .82rem !important; 
   color: #f1f5f9; letter-spacing: -.3px;
 }
 .hero-bar .hero-sub {
-  font-size: .78rem; color: var(--muted); margin-top: .15rem;
+    font-size: .78rem; color: rgba(226,232,240,.82); margin-top: .15rem;
 }
 .hero-bar .hero-badge {
-  background: var(--accent-glow); color: var(--accent);
-  border: 1px solid rgba(6,214,160,.25);
+    background: rgba(255,255,255,.14); color: #dbeafe;
+    border: 1px solid rgba(255,255,255,.25);
   padding: .3rem .7rem; border-radius: 999px;
-  font-size: .72rem; font-weight: 600; letter-spacing: .5px;
+    font-size: .72rem; font-weight: 700; letter-spacing: .6px;
+    text-transform: uppercase;
 }
 
 /* risk result card */
@@ -180,10 +208,10 @@ section[data-testid="stSidebar"] .stRadio label { font-size: .82rem !important; 
 }
 .risk-result:hover {
   transform: translateY(-2px);
-  box-shadow: 0 12px 40px rgba(0,0,0,.3);
+    box-shadow: 0 12px 40px rgba(0,0,0,.35);
 }
 .risk-pct {
-  font-size: 3rem; font-weight: 800; line-height: 1;
+    font-size: 3rem; font-weight: 800; line-height: 1; font-family: 'JetBrains Mono', monospace;
   margin: .3rem 0; letter-spacing: -1px;
 }
 .risk-pct.low  { color: var(--accent); }
@@ -209,6 +237,7 @@ section[data-testid="stSidebar"] .stRadio label { font-size: .82rem !important; 
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 1rem 1.2rem;
+    box-shadow: 0 10px 30px rgba(2, 6, 23, .24);
 }
 .glass-card h3 {
   margin: 0 0 .3rem; font-size: .85rem; font-weight: 600;
@@ -228,6 +257,13 @@ section[data-testid="stSidebar"] .stRadio label { font-size: .82rem !important; 
 
 /* plotly container */
 .stPlotlyChart { border-radius: var(--radius); overflow: hidden; }
+
+div[data-testid="stMetric"] {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: .55rem .7rem;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -245,11 +281,19 @@ def flatten_columns(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def build_common_columns(df: pd.DataFrame) -> pd.DataFrame:
+    out = df.copy()
+    rename_map = {
+        c: {"open": "Open", "high": "High", "low": "Low", "close": "Close", "volume": "Volume"}.get(
+            str(c).strip().lower(), str(c).strip()
+        )
+        for c in out.columns
+    }
+    out = out.rename(columns=rename_map)
+
     required = ["Open", "High", "Low", "Close", "Volume"]
-    missing = [c for c in required if c not in df.columns]
+    missing = [c for c in required if c not in out.columns]
     if missing:
         raise ValueError(f"Missing OHLCV columns: {missing}")
-    out = df.copy()
 
     # ── base returns (MUST match training scripts exactly) ────────────────
     out["return"]             = out["Close"].pct_change()           # pct_change for daily & minute models
@@ -267,10 +311,18 @@ def build_common_columns(df: pd.DataFrame) -> pd.DataFrame:
     out["momentum"]           = out["Close"] - out["Close"].shift(5)  # absolute for daily model
 
     # ── volume / turnover ─────────────────────────────────────────────────
-    out["volume_change"]      = out["Volume"].pct_change()
+    # Crash replay CSVs can have all-zero volume; keep these engineered columns finite.
+    out["volume_change"]      = (
+        out["Volume"].pct_change().replace([np.inf, -np.inf], np.nan).fillna(0.0)
+    )
     out["VWAP"]               = (out["High"] + out["Low"] + out["Close"]) / 3.0
     out["vwap_diff"]          = (out["Close"] - out["VWAP"]) / out["VWAP"].replace(0, np.nan)
-    out["turnover_change"]    = (out["Close"] * out["Volume"]).pct_change()
+    out["turnover_change"]    = (
+        (out["Close"] * out["Volume"])
+        .pct_change()
+        .replace([np.inf, -np.inf], np.nan)
+        .fillna(0.0)
+    )
 
     # ── price structure ───────────────────────────────────────────────────
     out["high_low_spread"]    = (out["High"] - out["Low"]) / out["Close"].replace(0, np.nan)
@@ -278,6 +330,8 @@ def build_common_columns(df: pd.DataFrame) -> pd.DataFrame:
 
     # ── minute-model extras ───────────────────────────────────────────────
     out["price_acceleration"] = out["return"].diff()
+    out["volatility_20"]      = out["return"].rolling(20).std()
+    out["momentum_10"]        = out["Close"].pct_change(10)
 
     return out
 
@@ -343,7 +397,24 @@ def compute_risk_timeline(
         dates.append(idx[i - 1])
     if not probs:
         raise ValueError("Not enough rows to build a risk timeline.")
-    return pd.DataFrame({"crash_risk": probs}, index=pd.DatetimeIndex(dates))
+    return pd.DataFrame({"crash_risk": probs}, index=pd.Index(dates, name=idx.name))
+
+
+def prepare_uploaded_df(df: pd.DataFrame) -> tuple[pd.DataFrame, bool]:
+    """Normalize uploaded CSV, optionally promote a datetime column to index."""
+    out = flatten_columns(df)
+    date_candidates = ["Date", "date", "Datetime", "datetime", "Timestamp", "timestamp", "time", "Time"]
+    for col in date_candidates:
+        if col in out.columns:
+            parsed = pd.to_datetime(out[col], errors="coerce")
+            valid_ratio = float(parsed.notna().mean()) if len(parsed) else 0.0
+            if valid_ratio >= 0.8:
+                out = out.copy()
+                out.index = parsed
+                out = out[parsed.notna()].sort_index()
+                out = out.drop(columns=[col], errors="ignore")
+                return out, True
+    return out, False
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -616,34 +687,6 @@ def portfolio_bar_chart(port_df: pd.DataFrame, threshold: float) -> go.Figure:
     return fig
 
 
-def model_comparison_chart(comp_df: pd.DataFrame, threshold: float) -> go.Figure:
-    df = comp_df.dropna(subset=["Crash Risk"]).sort_values("Crash Risk")
-    colors = [
-        "#b91c1c" if r >= threshold else "#d97706" if r >= threshold * 0.65 else "#0f766e"
-        for r in df["Crash Risk"]
-    ]
-    fig = go.Figure(go.Bar(
-        x=df["Model"], y=df["Crash Risk"],
-        marker_color=colors,
-        text=[f"{v:.1%}" for v in df["Crash Risk"]],
-        textposition="outside",
-    ))
-    fig.add_hline(
-        y=threshold, line_dash="dash", line_color="#7f1d1d",
-        annotation_text=f"Threshold {threshold:.0%}",
-        annotation_position="top right",
-    )
-    fig.update_layout(
-        yaxis=dict(tickformat=".0%", range=[0, 1.1]),
-        height=370,
-        margin=dict(l=10, r=10, t=30, b=90),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        xaxis_tickangle=-35,
-    )
-    return fig
-
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # SESSION STATE
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -690,7 +733,7 @@ st.sidebar.caption(f"Input: {timesteps} steps × {feature_count} features")
 threshold = st.sidebar.slider("Risk threshold", 0.05, 0.95, 0.20, 0.05, format="%.2f")
 mode = st.sidebar.radio(
     "Mode",
-    ["Live Market", "Risk Timeline", "Portfolio Scan", "Compare Models", "Upload CSV"],
+    ["Live Market", "Portfolio Scan", "Upload CSV"],
 )
 st.sidebar.markdown("---")
 
@@ -864,65 +907,7 @@ if mode == "Live Market":
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# MODE 2 — RISK TIMELINE
-# ═══════════════════════════════════════════════════════════════════════════════
-
-elif mode == "Risk Timeline":
-    st.subheader("📈 Rolling GRU Risk Curve over Full History")
-    st.caption(
-        "Runs the GRU on every sliding window to produce a continuous risk-probability "
-        "curve aligned with the price chart — great for spotting structural stress periods."
-    )
-
-    rc1, rc2, rc3, rc4 = st.columns(4)
-    with rc1:
-        tl_preset  = st.selectbox("NIFTY preset", list(NIFTY_PRESETS.keys()), key="tl_pre")
-        tl_pval    = NIFTY_PRESETS[tl_preset]
-    with rc2:
-        tl_ticker  = st.text_input("Ticker", value=tl_pval or "RELIANCE.NS", key="tl_t").strip().upper()
-    with rc3:
-        tl_period  = st.selectbox("Period", ["6mo", "1y", "2y"], index=1, key="tl_p")
-    with rc4:
-        tl_interval = st.selectbox("Interval", ["1d"], key="tl_i")
-
-    tl_step = st.slider(
-        "Stride (rows between predictions)", 1, 10, 1,
-        help="1 = densest resolution; higher = faster compute, coarser curve",
-    )
-
-    if st.button("▶ Compute risk timeline", type="primary"):
-        with st.spinner(f"Fetching {tl_ticker} and running rolling GRU predictions…"):
-            try:
-                tl_df, tl_demo = safe_load(tl_ticker, tl_period, tl_interval, use_demo_fallback)
-                if tl_demo:
-                    st.warning("Using demo stream (provider rate-limited).")
-                tl_risk = compute_risk_timeline(tl_df, model, timesteps, feature_count, step=tl_step)
-            except Exception as exc:
-                st.error(f"Timeline failed: {exc}")
-                st.stop()
-
-        high_windows = int((tl_risk["crash_risk"] >= threshold).sum())
-        tm1, tm2, tm3 = st.columns(3)
-        tm1.metric("Windows evaluated", len(tl_risk))
-        tm2.metric("High-risk windows",  high_windows)
-        tm3.metric("% time at high risk", f"{high_windows / len(tl_risk):.1%}")
-
-        st.plotly_chart(
-            candlestick_with_risk(tl_df, tl_risk, threshold, tl_ticker),
-            use_container_width=True,
-        )
-
-        with st.expander("Risk data table"):
-            styled = (
-                tl_risk
-                .rename(columns={"crash_risk": "Crash Risk"})
-                .style.format("{:.2%}")
-            )
-            st.dataframe(styled, use_container_width=True)
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# MODE 3 — PORTFOLIO SCAN
+# MODE 2 — PORTFOLIO SCAN
 # ═══════════════════════════════════════════════════════════════════════════════
 
 elif mode == "Portfolio Scan":
@@ -982,72 +967,7 @@ elif mode == "Portfolio Scan":
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# MODE 4 — COMPARE MODELS
-# ═══════════════════════════════════════════════════════════════════════════════
-
-elif mode == "Compare Models":
-    st.subheader("⚖️ Model Comparison")
-    st.caption(
-        "Run every available model artifact on the same price history and compare "
-        "their crash-risk scores side by side."
-    )
-
-    cm1, cm2 = st.columns(2)
-    with cm1:
-        cm_preset  = st.selectbox("NIFTY preset", list(NIFTY_PRESETS.keys()), key="cm_pre")
-        cm_pval    = NIFTY_PRESETS[cm_preset]
-        cm_ticker  = st.text_input("Ticker", value=cm_pval or "RELIANCE.NS", key="cm_t").strip().upper()
-    with cm2:
-        cm_period   = st.selectbox("Period",   ["3mo", "6mo", "1y"], index=1, key="cm_p")
-        cm_interval = st.selectbox("Interval", ["1d"],               index=0, key="cm_i")
-
-    if st.button("⚖️ Compare all models", type="primary"):
-        with st.spinner("Loading data…"):
-            try:
-                cm_df, cm_demo = safe_load(cm_ticker, cm_period, cm_interval, use_demo_fallback)
-                if cm_demo:
-                    st.warning("Using demo market stream.")
-            except Exception as exc:
-                st.error(f"Data fetch failed: {exc}")
-                st.stop()
-
-        comp_rows = []
-        for mpath in available_models:
-            try:
-                m_      = load_trained_model(str(mpath))
-                t_, f_  = get_model_signature(m_)
-                sq_, *_ = build_sequence(cm_df, t_, f_)
-                pr_     = normalize_prob(predict_probability(m_, sq_))
-                comp_rows.append({
-                    "Model": mpath.name,
-                    "Crash Risk": pr_,
-                    "Band": risk_band(pr_, threshold)[0],
-                    "Shape": f"{t_}×{f_}",
-                })
-            except Exception as exc:
-                comp_rows.append({"Model": mpath.name, "Crash Risk": None,
-                                  "Band": f"Error: {exc}", "Shape": "—"})
-
-        comp_df = pd.DataFrame(comp_rows)
-        valid_c = comp_df.dropna(subset=["Crash Risk"])
-
-        if not valid_c.empty:
-            v1, v2, v3 = st.columns(3)
-            v1.metric("Models run",  len(comp_rows))
-            v2.metric("Avg risk",    f"{valid_c['Crash Risk'].mean():.1%}")
-            agreement = (valid_c["Band"] == valid_c["Band"].mode()[0]).mean()
-            v3.metric("Agreement",   f"{agreement:.0%}")
-            st.plotly_chart(model_comparison_chart(valid_c, threshold), use_container_width=True)
-
-        st.dataframe(
-            comp_df.style.format({"Crash Risk": "{:.1%}"}, na_rep="—"),
-            use_container_width=True,
-            hide_index=True,
-        )
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# MODE 5 — UPLOAD CSV
+# MODE 3 — UPLOAD CSV
 # ═══════════════════════════════════════════════════════════════════════════════
 
 else:
@@ -1060,9 +980,27 @@ else:
     uploaded = st.file_uploader("Drop CSV here", type=["csv"])
     if uploaded and st.button("▶ Run prediction", type="primary"):
         try:
-            up_df = pd.read_csv(uploaded)
+            raw_up_df = pd.read_csv(uploaded)
+            up_df, has_time_index = prepare_uploaded_df(raw_up_df)
+
+            # Intraday crash files should be scored with the minute model family.
+            inferred_intraday = False
+            if has_time_index and len(up_df.index) >= 3:
+                deltas = pd.Series(up_df.index).diff().dropna()
+                if not deltas.empty:
+                    inferred_intraday = bool(deltas.median() <= pd.Timedelta("1h"))
+            if inferred_intraday and feature_count != 10:
+                st.warning(
+                    "Uploaded file looks intraday/minute-level. "
+                    "For crash-event detection, select **improved_minute_model.keras** in the sidebar."
+                )
+
             seq, ff, feature_list = build_sequence(up_df, timesteps, feature_count)
             prob = normalize_prob(predict_probability(model, seq))
+            tl = compute_risk_timeline(up_df, model, timesteps, feature_count, step=1)
+            peak_prob = normalize_prob(float(tl["crash_risk"].max()))
+            peak_at = tl["crash_risk"].idxmax()
+            high_share = float((tl["crash_risk"] >= threshold).mean())
         except Exception as exc:
             st.error(f"Inference failed: {exc}")
             st.stop()
@@ -1081,7 +1019,16 @@ else:
                 st.error(f"High crash-risk signal ≥ {threshold:.0%}")
             else:
                 st.success("No high-risk signal under current threshold")
+
+            m1, m2 = st.columns(2)
+            m1.metric("Peak risk in file", f"{peak_prob:.1%}")
+            m2.metric("High-risk windows", f"{high_share:.1%}")
+            st.caption(f"Peak observed at: {peak_at}")
         with u2:
             st.plotly_chart(feature_bar_chart(ff, feature_list), use_container_width=True)
+            st.plotly_chart(
+                candlestick_with_risk(up_df, tl, threshold, "Uploaded CSV"),
+                use_container_width=True,
+            )
             with st.expander("Engineered rows (last 5)"):
                 st.dataframe(ff.tail(5), use_container_width=True)
